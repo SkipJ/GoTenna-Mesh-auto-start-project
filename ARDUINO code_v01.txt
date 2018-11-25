@@ -1,0 +1,122 @@
+
+You should be able to cut and paste the text/code below the line into the Arduino IDE…
+
+—————————————
+
+#include <LowPower.h>
+
+const int sleeptime=2;      // change this value to the number of minutes you want it to sleep
+                            // I use 2 minutes for testing and proving 
+
+// the setup function runs once when you press reset or power the board
+
+const int LIGHT_PIN = A0; // Pin connected to photocell voltage divider output
+const int OPTO_PIN = 4;    // d4 is what we're using to operate pushbutton with optocoupler
+const int INT_LED=13;     // this is internal onboard LED
+
+void setup() {
+  pinMode(INT_LED, OUTPUT);  
+  pinMode(OPTO_PIN, OUTPUT);
+  pinMode(LIGHT_PIN, INPUT);
+
+  Serial.begin(9600);     // use for debug... will turn off later
+  digitalWrite(INT_LED,LOW);  // turn off internal LED to save power
+}
+
+// the loop function runs over and over again forever
+
+void loop() {
+  // in this loop, we will first do quickpress to see if unit is on, by checking light output immediately after
+  
+  quickpress(OPTO_PIN);
+  int v = getlightreading();
+  
+  Serial.println("light value from main program = " + String(v));
+  
+  if (v < 800)  {    //this means the device is off and no led response occurred... so we need to turn it on
+                  //if reading is over 800, we assume the device responded with some blinky lights
+                  // light value will be between 0 and 1023... testing showed that LEDs on GTM drive my sensor to 990 +-20
+    
+    Serial.println("no light signal... starting ON sequence in 5 sec");
+    delay(5000);     // this is a delay for testing only... will remove
+    
+    secpress(OPTO_PIN);   // turns unit on
+    delay(3000);
+    threepress(OPTO_PIN);   // first sequence of 3 presses to put it into relay mode
+    delay(3000);          // wait a few seconds, then
+    threepress(OPTO_PIN);     // second sequence of 3 presses to put it into relay mode
+    
+    Serial.println("device should now be in relay mode");
+  }
+  waitfortime(sleeptime);    // sleep time in minutes
+}
+
+
+int getlightreading(void)  {
+  // this module takes the highest of 10 photocell readings over roughly 200ms to determine if the GTM LED came on
+  // this multiple-read approach accomodates timing issues since the LED flashes instead of shining continuously
+  
+  int highval=0;
+  int curval=10;
+  
+  for (int i=0; i<=10; i++) {
+    curval = analogRead(LIGHT_PIN);
+    
+    Serial.println(String(curval));
+    
+    if (curval > highval) 
+      highval=curval;
+    delay(20);
+  }
+  Serial.println("light reading = " + String(highval));
+  Serial.println("");
+  
+  return highval;
+}
+
+
+void waitfortime(int min)  {
+  // this function is not fully functional yet.. it just performs a nominal wait period for testing at the moment
+  // the low-power library permits the device to be shutdown using a watchdog timer for restart... this can only do 8 seconds
+  // so I'll try doing it repeatedly with a loop... first trying 15 loop cycles at 8 seconds each, for a 2 minute sleep
+  int sec;
+  int i=0;
+  int cycles;
+  
+  sec=min*60;
+
+  cycles=int(sec/8);    // this will approximate the time... may be off by a few seconds, but who cares?
+  
+  for (i=0; i<cycles; i++) {
+    LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF); 
+  }
+
+}
+
+void quickpress(int pinnum)  {  // short keypress for checking unit status (get it to blink)
+  digitalWrite(pinnum, HIGH);
+  delay(100);                   // keypress is 100ms in duration
+  digitalWrite(pinnum, LOW);
+}
+
+void secpress(int pinnum)  {  // 1-second keypress for starting the unit
+  digitalWrite(pinnum, HIGH);
+  delay(1000);                // keypress is 1 second in duration
+  digitalWrite(pinnum, LOW);
+}
+
+void longpress(int pinnum)  {  // long press to turn unit off (4 seconds works for shutoff)
+  digitalWrite(pinnum, HIGH);
+  delay(4000);                // keypress is 4 seconds in duration
+  digitalWrite(pinnum, LOW);
+}
+
+void threepress(int pinnum)  {  // does 3 quick presses to put into relay mode
+  quickpress(pinnum);
+  delay(200);               // delay 200ms between presses
+  quickpress(pinnum);
+  delay(200);
+  quickpress(pinnum);
+}
+
+
